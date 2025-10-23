@@ -1,0 +1,32 @@
+# macOS
+.DS_Store
+
+# Xcode
+DerivedData/
+xcuserdata/
+*.xcuserstate
+*.xcworkspace/xcuserdata
+
+# Generated projects/workspaces (regenerables con `tuist generate`)
+*.xcodeproj
+*.xcworkspace
+
+# Tuist caches
+.tuist-cache/
+.tuist/
+.build/
+.cache/
+.local/
+Tuist/Cache/
+Tuist/Derived/
+
+# SwiftPM
+.build/
+Packages/
+Package.resolved
+
+# Logs
+*.log
+
+# Secrets (ajusta a tus necesidades)
+Secrets.swift
