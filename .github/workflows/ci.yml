@@ -7,7 +7,7 @@ on:
 
 env:
   # Usa la versión de Xcode disponible en los runners de macOS 15
-  XCODE_VERSION: '16.0.1'
+  XCODE_VERSION: '26.0.1'
   DERIVED_DATA: ${{ github.workspace }}/DerivedData
 
 jobs:
