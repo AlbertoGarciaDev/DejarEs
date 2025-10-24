@@ -9,6 +9,7 @@ env:
   # Usa la versión de Xcode disponible en los runners de macOS 15
   XCODE_VERSION: '26.0.1'
   DERIVED_DATA: ${{ github.workspace }}/DerivedData
+  TUIST_CONFIG_TOKEN: ${{ secrets.TUIST_CONFIG_TOKEN }}
 
 jobs:
   build-and-test:
