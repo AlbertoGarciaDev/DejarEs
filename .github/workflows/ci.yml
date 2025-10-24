@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+
+env:
+  # Usa la versión de Xcode disponible en los runners de macOS 15
+  XCODE_VERSION: '16.0.1'
+  DERIVED_DATA: ${{ github.workspace }}/DerivedData
+
+jobs:
+  build-and-test:
+    runs-on: macos-15  # macOS 15 incluye Xcode 16.x
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Select Xcode ${{ env.XCODE_VERSION }}
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ env.XCODE_VERSION }}
+
+      - name: Show Xcode versions
+        run: |
+          xcodebuild -version
+          xcodebuild -showsdks
+
+      # --- CACHES ---
+      - name: Cache SPM
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/org.swift.swiftpm
+            ~/.swiftpm
+          key: spm-${{ runner.os }}-xcode-${{ env.XCODE_VERSION }}-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            spm-${{ runner.os }}-xcode-${{ env.XCODE_VERSION }}-
+
+      - name: Cache Tuist
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/tuist
+            ~/.tuist
+          key: tuist-${{ runner.os }}-xcode-${{ env.XCODE_VERSION }}-${{ hashFiles('**/Dependencies.swift', 'Tuist/**/*') }}
+          restore-keys: |
+            tuist-${{ runner.os }}-xcode-${{ env.XCODE_VERSION }}-
+
+      - name: Cache DerivedData
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.DERIVED_DATA }}
+          key: dd-${{ runner.os }}-xcode-${{ env.XCODE_VERSION }}-${{ hashFiles('**/*.xcodeproj/project.pbxproj', '**/*.xcworkspace/contents.xcworkspacedata', 'Workspace.swift', 'Apps/**/Project.swift', 'Modules/**/Project.swift', 'Dependencies/**/Project.swift') }}
+          restore-keys: |
+            dd-${{ runner.os }}-xcode-${{ env.XCODE_VERSION }}-
+
+      # --- Instalar Tuist ---
+      - name: Install Tuist
+        run: |
+          brew tap tuist/tuist
+          brew install tuist
+          tuist version
+
+      # --- Resolver dependencias ---
+      - name: Tuist fetch (optional)
+        run: tuist fetch || true
+
+      - name: Tuist generate
+        run: tuist generate
+
+      # --- Compilación + Tests ---
+      - name: Build & Test (latest iOS Simulator)
+        run: |
+          xcodebuild \
+            -workspace DejarEs.xcworkspace \
+            -scheme DejarEsApp \
+            -destination 'platform=iOS Simulator,name=iPhone 16 Pro' \
+            -derivedDataPath "$DERIVED_DATA" \
+            -enableCodeCoverage YES \
+            clean test | xcpretty
+        env:
+          NSUnbufferedIO: YES
+
+      - name: Upload Test Logs if failed
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-logs
+          path: |
+            ${{ env.DERIVED_DATA }}/Logs/Test
