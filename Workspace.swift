@@ -3,8 +3,8 @@ import ProjectDescription
 let workspace = Workspace(
   name: "DejarEs",
   projects: [
-    "Apps/*",
-    "Modules/*",
-    "Dependencies/*"
+    "Apps/**",
+    "Modules/**",
+    "Dependencies/**"
   ]
 )
