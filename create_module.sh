@@ -1,17 +1,31 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# create_module.sh (v2)
+# Crea un módulo Tuist con Project.swift + Sources + Tests en el directorio indicado.
+# Por defecto NO modifica Workspace.swift. Usa --workspace auto para crearlo si no existe.
+#
+# Uso:
+#   bash create_module.sh <ModuleName> [--type framework|staticFramework|staticLibrary] \
+#     [--deps Mod1,Mod2,...] [--ios 17.0] [--dir Modules|Dependencies] [--bundle-base com.dejares] [--workspace auto|skip]
+#
+# Ejemplos:
+#   bash create_module.sh CoreDomain --dir Modules
+#   bash create_module.sh InfraPersistenceSwiftData --dir=Dependencies --deps InfraPersistenceAbstractions
+#   bash create_module.sh CorePersistenceAdapter --dir Modules --deps CoreDomain,InfraPersistenceAbstractions
+
 APP_NAME_DEFAULT="DejarEs"
 BUNDLE_BASE_DEFAULT="com.dejares"
 IOS_VERSION_DEFAULT="17.0"
-PRODUCT_DEFAULT="framework"
+PRODUCT_DEFAULT="framework"     # framework|staticFramework|staticLibrary
 BASE_DIR_DEFAULT="Modules"
+WORKSPACE_MODE_DEFAULT="skip"   # skip|auto
 
 require_cmd() { command -v "$1" >/dev/null 2>&1 || { echo "❌ Falta '$1'"; exit 1; }; }
 title() { echo; echo "=== $* ==="; }
 
 if [[ $# -lt 1 ]]; then
-  echo "Uso: bash $0 <ModuleName> [--type framework|staticFramework|staticLibrary] [--deps Mod1,Mod2,...] [--ios 17.0] [--dir Modules]"
+  echo "Uso: bash $0 <ModuleName> [--type framework|staticFramework|staticLibrary] [--deps Mod1,Mod2,...] [--ios 17.0] [--dir Modules|Dependencies] [--bundle-base com.dejares] [--workspace auto|skip]"
   exit 1
 fi
 
@@ -23,18 +37,32 @@ IOS_VERSION="$IOS_VERSION_DEFAULT"
 APP_NAME="$APP_NAME_DEFAULT"
 BUNDLE_BASE="$BUNDLE_BASE_DEFAULT"
 BASE_DIR="$BASE_DIR_DEFAULT"
+WORKSPACE_MODE="$WORKSPACE_MODE_DEFAULT"
 
+# Parse de flags con soporte --key value y --key=value
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --type) PRODUCT="${2:-$PRODUCT_DEFAULT}"; shift 2;;
-    --deps) DEPS_CSV="${2:-}"; shift 2;;
-    --ios)  IOS_VERSION="${2:-$IOS_VERSION_DEFAULT}"; shift 2;;
-    --bundle-base) BUNDLE_BASE="${2:-$BUNDLE_BASE_DEFAULT}"; shift 2;;
-    --app-name) APP_NAME="${2:-$APP_NAME_DEFAULT}"; shift 2;;
-    --dir) BASE_DIR="${2:-$BASE_DIR_DEFAULT}"; shift 2;;
-    *) echo "⚠️ Opción desconocida: $1"; shift;;
+    --type|--deps|--ios|--bundle-base|--app-name|--dir|--workspace)
+      key="$1"; val="${2:-}"; shift 2;;
+    --type=*|--deps=*|--ios=*|--bundle-base=*|--app-name=*|--dir=*|--workspace=*)
+      key="${1%%=*}"; val="${1#*=}"; shift 1;;
+    *)
+      echo "⚠️ Opción desconocida: $1"; shift; continue;;
+  esac
+  case "$key" in
+    --type) PRODUCT="$val";;
+    --deps) DEPS_CSV="$val";;
+    --ios) IOS_VERSION="$val";;
+    --bundle-base) BUNDLE_BASE="$val";;
+    --app-name) APP_NAME="$val";;
+    --dir) BASE_DIR="$val";;
+    --workspace) WORKSPACE_MODE="$val";;
   esac
 done
+
+case "$PRODUCT" in framework|staticFramework|staticLibrary) ;; *) echo "❌ --type inválido"; exit 1;; esac
+case "$WORKSPACE_MODE" in skip|auto) ;; *) echo "❌ --workspace debe ser auto|skip"; exit 1;; esac
+case "$BASE_DIR" in Modules|Dependencies) ;; *) echo "❌ --dir debe ser Modules o Dependencies"; exit 1;; esac
 
 require_cmd tuist
 mkdir -p "$BASE_DIR" Apps
@@ -55,14 +83,49 @@ final class DummyTests: XCTestCase {
 EOF
 }
 
+# Deduce carpeta base de un dep por nombre si no viene con prefijo
+base_for_dep() {
+  local dep="$1"
+  if [[ "$dep" == Modules/* ]]; then echo "Modules"; return; fi
+  if [[ "$dep" == Dependencies/* ]]; then echo "Dependencies"; return; fi
+  if [[ "$dep" == Infra* ]]; then echo "Dependencies"; return; fi
+  # Por convención: Core*/Feature* en Modules
+  echo "Modules"
+}
+
+# Nombre puro del dep (sin prefijo de carpeta)
+dep_basename() {
+  local dep="$1"
+  echo "${dep##*/}"
+}
+
+# Calcula path relativo desde $BASE_DIR/$MODULE_NAME a <depBase>/<depName>
+rel_path_to_dep() {
+  local depBase="$1" depName="$2"
+  if [[ "$BASE_DIR" == "$depBase" ]]; then
+    echo "../$depName"
+  elif [[ "$BASE_DIR" == "Modules" && "$depBase" == "Dependencies" ]]; then
+    echo "../../Dependencies/$depName"
+  elif [[ "$BASE_DIR" == "Dependencies" && "$depBase" == "Modules" ]]; then
+    echo "../../Modules/$depName"
+  else
+    # fallback
+    echo "../$depName"
+  fi
+}
+
 gen_dep_lines() {
   local csv="$1"
   [[ -z "$csv" ]] && return 0
   IFS=',' read -ra arr <<< "$csv"
-  for dep in "${arr[@]}"; do
-    dep_trimmed="$(echo "$dep" | xargs)"
-    [[ -z "$dep_trimmed" ]] && continue
-    echo "        .project(target: \"$dep_trimmed\", path: \"../$dep_trimmed\"),"
+  for raw in "${arr[@]}"; do
+    dep="$(echo "$raw" | xargs)"
+    [[ -z "$dep" ]] && continue
+    local depBase depName rel
+    depBase="$(base_for_dep "$dep")"
+    depName="$(dep_basename "$dep")"
+    rel="$(rel_path_to_dep "$depBase" "$depName")"
+    echo "        .project(target: \"$depName\", path: \"$rel\"),"
   done
 }
 
@@ -106,13 +169,10 @@ $deps_formatted
 EOF
 }
 
-ensure_workspace() {
+maybe_create_workspace() {
+  [[ "$WORKSPACE_MODE" == "skip" ]] && { echo "• Workspace.swift: skip (no se modifica)"; return; }
   if [[ -f "Workspace.swift" ]]; then
-    if ! grep -q 'Modules/\*\*' Workspace.swift; then
-      # Inserta "Modules/**" al inicio de la lista de projects (macOS sed)
-      perl -0777 -pe 's/projects:\s*\[/projects: \[\n    "Modules\/**",/s' -i '' Workspace.swift 2>/dev/null || true
-      echo "• Workspace.swift actualizado para incluir \"Modules/**\""
-    fi
+    echo "• Workspace.swift existente: no se modifica (modo auto)."
     return
   fi
   cat > "Workspace.swift" <<EOF
@@ -122,11 +182,12 @@ let workspace = Workspace(
   name: "$APP_NAME",
   projects: [
     "Apps/**",
-    "Modules/**"
+    "Modules/**",
+    "Dependencies/**"
   ]
 )
 EOF
-  echo "• Workspace.swift creado con globs (Apps/** y Modules/**)."
+  echo "• Workspace.swift creado (Apps/**, Modules/**, Dependencies/**)."
 }
 
 title "Creando módulo: $MODULE_NAME en $BASE_DIR/"
@@ -137,13 +198,13 @@ fi
 
 create_skeleton "$MODULE_NAME"
 write_project_swift "$MODULE_NAME" "$PRODUCT" "$IOS_VERSION" "$BUNDLE_BASE" "$NAME_LC" "$DEPS_CSV"
-ensure_workspace
+maybe_create_workspace
 
 echo
 echo "✅ Módulo '$MODULE_NAME' creado en $BASE_DIR/$MODULE_NAME"
 echo "   Tipo: $PRODUCT | iOS: $IOS_VERSION"
 echo "   Dependencias: ${DEPS_CSV:-ninguna}"
+echo "   Workspace: $WORKSPACE_MODE"
 echo
 echo "Siguiente paso:"
-echo "  • tuist generate
-"
+echo "  • tuist generate"
