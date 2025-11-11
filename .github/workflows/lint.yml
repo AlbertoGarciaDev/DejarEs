@@ -14,20 +14,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Homebrew dependencies
+      - name: Install SwiftLint
         run: |
-          # Usa el Brewfile del repo para instalar solo lo necesario
-          if [ -f Brewfile ]; then
-            brew update
-            # Intento normal; si alguna versión da lata, no forzamos upgrade de todo
-            brew bundle --file=Brewfile || brew bundle --file=Brewfile --no-upgrade
-          fi
+          brew update
+          brew install swiftlint || brew upgrade swiftlint || true
 
       - name: Run SwiftLint
         run: |
-          if which swiftlint >/dev/null; then
-            swiftlint --strict --config .swiftlint.yml
-          else
-            echo "SwiftLint no está instalado. Revisa tu Brewfile o instala swiftlint en este job."
-            exit 1
-          fi
+          swiftlint --strict --config .swiftlint.yml
