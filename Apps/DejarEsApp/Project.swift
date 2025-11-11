@@ -18,6 +18,19 @@ let project = Project(
       ]),
       sources: ["Sources/**"],
       resources: ["Resources/**"],
+      scripts: [
+        .pre(
+            script: """
+                if which swiftlint >/dev/null; then
+                  echo "Running SwiftLint..."
+                  swiftlint --config "$SRCROOT/../../.swiftlint.yml"
+                else
+                  echo "warning: SwiftLint no está instalado. Instálalo con 'brew install swiftlint'"
+                fi
+                """,
+            name: "SwiftLint"
+        )
+      ],
       dependencies: [
         .project(target: "FeatureHabits", path: "../../Modules/FeatureHabits"),
         .project(target: "DesignSystem",  path: "../../Dependencies/DesignSystem")

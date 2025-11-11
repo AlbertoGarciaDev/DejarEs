@@ -1,0 +1,75 @@
+# ────────────────────────────────
+# SwiftLint config — DejarEs
+# ────────────────────────────────
+
+included:
+  - Apps
+  - Modules
+  - Dependencies
+
+excluded:
+  - .build
+  - DerivedData
+  - Tuist
+  - **/Generated
+  - **/*.lproj
+  - **/*.xcassets
+  - **/*Tests/Snapshots
+
+# ────────────────────────────────
+# Reglas desactivadas
+# ────────────────────────────────
+disabled_rules:
+  - todo
+  - trailing_whitespace
+  - nesting
+  - unused_optional_binding
+  - implicit_getter
+  - file_header
+
+# ────────────────────────────────
+# Reglas activadas extra (opt-in)
+# ────────────────────────────────
+opt_in_rules:
+  - attributes
+  - closure_spacing
+  - collection_alignment
+  - empty_count
+  - empty_string
+  - explicit_init
+  - fatal_error_message
+  - force_unwrapping
+  - joined_default_parameter
+  - modifier_order
+  - redundant_nil_coalescing
+  - sorted_imports
+  - vertical_parameter_alignment_on_call
+  - private_action
+  - private_outlet
+  - unused_declaration
+  - unused_import
+
+# ────────────────────────────────
+# Parámetros personalizados
+# ────────────────────────────────
+line_length:
+  warning: 120
+  error: 160
+  ignores_comments: true
+  ignores_urls: true
+  ignores_function_declarations: true
+  ignores_interpolated_strings: true
+
+type_body_length:
+  warning: 300
+  error: 500
+
+function_body_length:
+  warning: 60
+  error: 100
+
+identifier_name:
+  min_length: 2
+  excluded: ["id", "x", "y", "i", "j", "k"]
+
+reporter: "xcode"
