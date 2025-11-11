@@ -33,7 +33,7 @@ let project = Project(
       ],
       dependencies: [
         .project(target: "FeatureHabits", path: "../../Modules/FeatureHabits"),
-        .project(target: "DesignSystem",  path: "../../Dependencies/DesignSystem")
+        .project(target: "DesignSystem", path: "../../Dependencies/DesignSystem")
       ]
     )
   ]
